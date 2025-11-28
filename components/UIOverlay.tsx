@@ -4,17 +4,15 @@ import { GameState, Region, REGION_COLORS, REGION_LABELS } from '../types';
 
 interface UIOverlayProps {
   gameState: GameState;
-  aiCommentary: string;
 }
 
-const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, aiCommentary }) => {
+const UIOverlay: React.FC<UIOverlayProps> = ({ gameState }) => {
   const sortedRegions = (Object.keys(gameState.regionScores) as Region[])
     .sort((a, b) => gameState.regionScores[b] - gameState.regionScores[a]);
 
   const me = gameState.players.find(p => p.id === gameState.myId);
   const totalPlayers = gameState.players.length;
   const botCount = gameState.players.filter(p => p.isBot).length;
-  const humanCount = totalPlayers - botCount; // 目前只是單機模擬，所以 humanCount 永遠是 1
 
   return (
     <div className="absolute top-0 left-0 w-full h-full pointer-events-none p-4 flex justify-between items-start">
@@ -24,6 +22,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, aiCommentary }) => {
         {/* Adjusted margin top to avoid minimap */}
         <div className="bg-black/70 border border-gray-500 p-4 rounded text-white font-mono text-sm shadow-lg backdrop-blur-sm">
            <h3 className="text-yellow-400 font-bold mb-2 pixel-font">STATUS</h3>
+           <p className="mb-1">Room: <span className="text-yellow-200">{gameState.roomId}</span></p>
            <p className="mb-1">Name: <span style={{ color: me?.color }}>{me?.name}</span></p>
            <p className="mb-1">HP: {Math.max(0, me?.hp || 0)}/100</p>
            <p className="mb-1">Score: {me?.score}</p>
@@ -34,15 +33,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, aiCommentary }) => {
         </div>
       </div>
 
-      {/* Center: AI Commentary */}
+      {/* Center: Removed AI Commentary */}
       <div className="absolute top-4 left-1/2 transform -translate-x-1/2 w-full max-w-lg text-center">
-        {aiCommentary && (
-            <div className="bg-gradient-to-r from-purple-900/80 to-blue-900/80 border-y-2 border-yellow-400 p-2 shadow-[0_0_15px_rgba(255,215,0,0.5)]">
-                <p className="text-yellow-300 font-bold text-sm md:text-base animate-pulse tracking-wider">
-                   🎙️ {aiCommentary}
-                </p>
-            </div>
-        )}
       </div>
 
       {/* Right: Leaderboard */}

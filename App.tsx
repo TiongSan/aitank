@@ -3,17 +3,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import LoginScreen from './components/LoginScreen';
 import GameCanvas from './components/GameCanvas';
 import UIOverlay from './components/UIOverlay';
-import { GameState, InputState, Region } from './types';
-import { initGame, updateGame } from './services/gameLogic';
+import { GameState, InputState, Region, NetMessage } from './types';
+import { initGame, updateGame, addPlayer, removePlayer } from './services/gameLogic';
 import { audioService } from './services/audioService';
-import { generateCommentary } from './services/geminiService';
+// Import PeerJS from ESM
+import { Peer, DataConnection } from 'peerjs';
 
-// Mobile controls helper
+// Prefix to avoid collisions on public PeerJS server
+const ROOM_PREFIX = 'rtw-pixel-tank-';
+
 const MobileControls: React.FC<{ setInput: (updater: (prev: InputState) => InputState) => void }> = ({ setInput }) => {
     return (
         <div className="fixed bottom-4 left-4 right-4 flex justify-between pointer-events-auto md:hidden touch-none select-none z-50">
             <div className="relative w-32 h-32 bg-gray-800/50 rounded-full border border-gray-500">
-                {/* D-Pad approximation */}
                 <div 
                     className="absolute top-0 left-1/3 w-1/3 h-1/3 bg-gray-600/50 rounded-t active:bg-white/50"
                     onTouchStart={() => setInput(s => ({...s, up: true}))} onTouchEnd={() => setInput(s => ({...s, up: false}))}
@@ -46,65 +48,192 @@ const MobileControls: React.FC<{ setInput: (updater: (prev: InputState) => Input
 const App: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [aiCommentary, setAiCommentary] = useState<string>("歡迎來到坦克大戰競技場！");
+  const [statusMsg, setStatusMsg] = useState('');
   
-  // Use refs for game loop to avoid stale closures
   const stateRef = useRef<GameState | null>(null);
   const inputRef = useRef<InputState>({ up: false, down: false, left: false, right: false, fire: false });
+  // Map of ALL inputs (including bots/remote). Host uses this to run physics.
+  const allInputsRef = useRef<Record<string, InputState>>({}); 
+  
   const reqRef = useRef<number | undefined>(undefined);
   const lastTimeRef = useRef<number>(0);
-  const commentaryTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
-  const handleJoin = (name: string, region: Region) => {
-    const initialState = initGame(name, region);
-    setGameState(initialState);
-    stateRef.current = initialState;
-    setIsPlaying(true);
-    audioService.init();
-    audioService.startBGM();
+  // Network Refs
+  const peerRef = useRef<Peer | null>(null);
+  const connectionsRef = useRef<DataConnection[]>([]); // For Host: list of clients
+  const hostConnRef = useRef<DataConnection | null>(null); // For Client: connection to host
 
-    // Start AI Commentary Loop (Every 15 seconds)
-    if (commentaryTimerRef.current) clearInterval(commentaryTimerRef.current);
-    commentaryTimerRef.current = setInterval(async () => {
-       if(stateRef.current) {
-           // Find leader
-           const scores = stateRef.current.regionScores;
-           const regions = Object.keys(scores) as Region[];
-           if (regions.length === 0) return;
-           
-           const leader = regions.reduce((a, b) => scores[a] > scores[b] ? a : b);
-           const comment = await generateCommentary(scores, leader);
-           setAiCommentary(comment);
-       }
-    }, 15000);
+  const handleJoin = async (name: string, region: Region, roomId: string, withBots: boolean) => {
+    setStatusMsg('連接中...');
+    
+    // We try to "Create" the room. If it fails (ID taken), we assume "Join" mode.
+    // NOTE: In a real app, we'd be explicit. Here we infer from PeerJS error or user intent.
+    // However, to keep it simple with the UI toggle:
+    // We will use the 'mode' from UI logic implicitly:
+    // If the user clicked "Create", we try to open that ID.
+    // If the user clicked "Join", we connect to that ID.
+    // Since handleJoin doesn't pass the "mode", we'll check if we can claim the ID.
+    
+    // Actually, to respect the UI "Create/Join" separation strictly:
+    // We can't easily know here. But we can try to OPEN the room.
+    // If "unavailable-id", it means room exists -> Join it.
+    // This makes the experience seamless.
+    
+    // Initialize Peer
+    const peer = new Peer(undefined, {
+       debug: 1
+    });
+    
+    peer.on('open', (id) => {
+        // We have a temporary random ID. Now let's try to connect or claim.
+        // Wait, PeerJS constructor takes ID as first arg.
+        // Let's destroy this and try to claim the ID if we are creating.
+        // To simplify: I'll use the UI flow to dictate strategy.
+        // But `handleJoin` is generic. Let's try to BECOME the host with the specific ID.
+        // If that fails, we are a client.
+    });
+
+    // Strategy: Try to be the Host with specific ID.
+    const fullRoomId = ROOM_PREFIX + roomId;
+    
+    // Attempt to be HOST
+    const hostPeer = new Peer(fullRoomId);
+    
+    hostPeer.on('open', (id) => {
+        // SUCCESS: We are the HOST
+        console.log('Host created room:', id);
+        setStatusMsg('');
+        
+        peerRef.current = hostPeer;
+        const initialState = initGame(name, region, roomId, withBots);
+        stateRef.current = initialState;
+        setGameState(initialState);
+        setIsPlaying(true);
+        audioService.init();
+        audioService.startBGM();
+
+        // Host Input Setup
+        allInputsRef.current['host'] = inputRef.current;
+
+        // Listen for connections
+        hostPeer.on('connection', (conn) => {
+            conn.on('open', () => {
+                console.log('Client connected:', conn.peer);
+                connectionsRef.current.push(conn);
+            });
+            
+            conn.on('data', (data: any) => {
+                const msg = data as NetMessage;
+                if (msg.type === 'JOIN') {
+                    if (stateRef.current) {
+                        stateRef.current = addPlayer(stateRef.current, conn.peer, msg.name, msg.region);
+                        // Send Welcome
+                        const welcomeMsg: NetMessage = {
+                            type: 'WELCOME',
+                            playerId: conn.peer,
+                            state: stateRef.current
+                        };
+                        conn.send(welcomeMsg);
+                    }
+                } else if (msg.type === 'INPUT') {
+                    allInputsRef.current[conn.peer] = msg.input;
+                }
+            });
+
+            conn.on('close', () => {
+                if (stateRef.current) {
+                    stateRef.current = removePlayer(stateRef.current, conn.peer);
+                    delete allInputsRef.current[conn.peer];
+                    connectionsRef.current = connectionsRef.current.filter(c => c.peer !== conn.peer);
+                }
+            });
+        });
+    });
+
+    hostPeer.on('error', (err: any) => {
+        if (err.type === 'unavailable-id') {
+            // ID taken, so Room exists. We are a CLIENT.
+            console.log('Room exists, joining as client...');
+            hostPeer.destroy();
+            
+            const clientPeer = new Peer();
+            peerRef.current = clientPeer;
+
+            clientPeer.on('open', () => {
+                const conn = clientPeer.connect(fullRoomId);
+                hostConnRef.current = conn;
+                
+                conn.on('open', () => {
+                    console.log('Connected to Host');
+                    setStatusMsg('已連線，等待同步...');
+                    conn.send({ type: 'JOIN', name, region } as NetMessage);
+                });
+
+                conn.on('data', (data: any) => {
+                    const msg = data as NetMessage;
+                    if (msg.type === 'WELCOME') {
+                        setIsPlaying(true);
+                        setStatusMsg('');
+                        audioService.init();
+                        audioService.startBGM();
+                        stateRef.current = { ...msg.state, myId: msg.playerId, isHost: false };
+                        setGameState(stateRef.current);
+                    } else if (msg.type === 'STATE_UPDATE') {
+                        if (stateRef.current) {
+                            // Update local state with host state
+                            // Keep myId intact
+                            stateRef.current = { 
+                                ...msg.state, 
+                                myId: stateRef.current.myId,
+                                isHost: false 
+                            };
+                            setGameState(stateRef.current);
+                        }
+                    }
+                });
+                
+                conn.on('close', () => {
+                    alert('主機已斷線');
+                    window.location.reload();
+                });
+            });
+            
+            clientPeer.on('error', (e) => {
+                 console.error(e);
+                 setStatusMsg('連線錯誤: ' + e.message);
+            });
+        } else {
+            console.error('Peer Error', err);
+            setStatusMsg('連線錯誤: ' + err.type);
+        }
+    });
   };
 
   // Keyboard Inputs
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      switch(e.code) {
-        case 'KeyW': inputRef.current.up = true; break;
-        case 'KeyS': inputRef.current.down = true; break;
-        case 'KeyA': inputRef.current.left = true; break;
-        case 'KeyD': inputRef.current.right = true; break;
-        case 'ArrowUp': inputRef.current.up = true; break;
-        case 'ArrowDown': inputRef.current.down = true; break;
-        case 'ArrowLeft': inputRef.current.left = true; break;
-        case 'ArrowRight': inputRef.current.right = true; break;
-        case 'Space': inputRef.current.fire = true; break;
+      let changed = false;
+      if (e.code === 'KeyW' || e.code === 'ArrowUp') { inputRef.current.up = true; changed = true; }
+      if (e.code === 'KeyS' || e.code === 'ArrowDown') { inputRef.current.down = true; changed = true; }
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft') { inputRef.current.left = true; changed = true; }
+      if (e.code === 'KeyD' || e.code === 'ArrowRight') { inputRef.current.right = true; changed = true; }
+      if (e.code === 'Space') { inputRef.current.fire = true; changed = true; }
+      
+      // If Client, send input immediately (naive approach)
+      if (changed && hostConnRef.current && hostConnRef.current.open) {
+          hostConnRef.current.send({ type: 'INPUT', input: inputRef.current } as NetMessage);
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      switch(e.code) {
-        case 'KeyW': inputRef.current.up = false; break;
-        case 'KeyS': inputRef.current.down = false; break;
-        case 'KeyA': inputRef.current.left = false; break;
-        case 'KeyD': inputRef.current.right = false; break;
-        case 'ArrowUp': inputRef.current.up = false; break;
-        case 'ArrowDown': inputRef.current.down = false; break;
-        case 'ArrowLeft': inputRef.current.left = false; break;
-        case 'ArrowRight': inputRef.current.right = false; break;
-        case 'Space': inputRef.current.fire = false; break;
+      let changed = false;
+      if (e.code === 'KeyW' || e.code === 'ArrowUp') { inputRef.current.up = false; changed = true; }
+      if (e.code === 'KeyS' || e.code === 'ArrowDown') { inputRef.current.down = false; changed = true; }
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft') { inputRef.current.left = false; changed = true; }
+      if (e.code === 'KeyD' || e.code === 'ArrowRight') { inputRef.current.right = false; changed = true; }
+      if (e.code === 'Space') { inputRef.current.fire = false; changed = true; }
+
+      if (changed && hostConnRef.current && hostConnRef.current.open) {
+          hostConnRef.current.send({ type: 'INPUT', input: inputRef.current } as NetMessage);
       }
     };
 
@@ -122,14 +251,27 @@ const App: React.FC = () => {
 
     const loop = (time: number) => {
       if (!lastTimeRef.current) lastTimeRef.current = time;
-      const dt = (time - lastTimeRef.current) / 16.67; // Normalize to ~60fps
+      const dt = (time - lastTimeRef.current) / 16.67;
       lastTimeRef.current = time;
 
-      if (stateRef.current) {
-        stateRef.current = updateGame(stateRef.current, inputRef.current, dt);
-        setGameState(stateRef.current); // Trigger re-render
-      }
+      // HOST LOGIC: Calculate physics, Broadcast state
+      if (stateRef.current && stateRef.current.isHost) {
+        // Update Host input in the map
+        allInputsRef.current['host'] = inputRef.current;
+        
+        // Run Physics
+        stateRef.current = updateGame(stateRef.current, allInputsRef.current, dt);
+        
+        // Broadcast
+        const updateMsg: NetMessage = { type: 'STATE_UPDATE', state: stateRef.current };
+        connectionsRef.current.forEach(conn => {
+            if (conn.open) conn.send(updateMsg);
+        });
 
+        setGameState(stateRef.current);
+      } 
+      // CLIENT LOGIC: Just render (handled by setGameState in peer listener)
+      
       reqRef.current = requestAnimationFrame(loop);
     };
 
@@ -137,24 +279,34 @@ const App: React.FC = () => {
 
     return () => {
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
-      if (commentaryTimerRef.current) clearInterval(commentaryTimerRef.current);
     };
   }, [isPlaying]);
 
   const setInputState = (updater: (prev: InputState) => InputState) => {
       inputRef.current = updater(inputRef.current);
+      // For mobile controls, send update if client
+      if (hostConnRef.current && hostConnRef.current.open) {
+          hostConnRef.current.send({ type: 'INPUT', input: inputRef.current } as NetMessage);
+      }
   };
 
   return (
     <div className="w-full h-screen bg-neutral-900 flex flex-col items-center justify-center">
       {!isPlaying ? (
-        <LoginScreen onJoin={handleJoin} />
+        <>
+          <LoginScreen onJoin={handleJoin} />
+          {statusMsg && <div className="absolute bottom-10 text-yellow-400 pixel-font animate-pulse">{statusMsg}</div>}
+        </>
       ) : (
         gameState && (
           <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
             <GameCanvas gameState={gameState} />
-            <UIOverlay gameState={gameState} aiCommentary={aiCommentary} />
+            <UIOverlay gameState={gameState} />
             <MobileControls setInput={setInputState} />
+            {/* Connection Status Indicator */}
+            <div className="absolute top-2 right-2 text-xs text-green-500 font-mono">
+                {gameState.isHost ? `HOST (${connectionsRef.current.length} clients)` : `CLIENT (Ping: ok)`}
+            </div>
           </div>
         )
       )}

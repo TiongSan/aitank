@@ -60,6 +60,8 @@ export interface Particle {
 }
 
 export interface GameState {
+  roomId: string;
+  isHost: boolean; // Know if we are the authority
   players: Player[];
   bullets: Bullet[];
   particles: Particle[];
@@ -76,6 +78,13 @@ export interface InputState {
   right: boolean;
   fire: boolean;
 }
+
+// Network Types
+export type NetMessage = 
+  | { type: 'JOIN'; name: string; region: Region }
+  | { type: 'WELCOME'; playerId: string; state: GameState }
+  | { type: 'INPUT'; input: InputState }
+  | { type: 'STATE_UPDATE'; state: GameState };
 
 export const REGION_LABELS: Record<Region, string> = {
   Taipei: '台北市',
