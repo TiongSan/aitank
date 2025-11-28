@@ -72,9 +72,16 @@ export interface Item {
   type: ItemType;
 }
 
+export interface GameSettings {
+  botCount: number;
+  itemSpawnInterval: number; // ms
+  buffDuration: number;      // ms
+}
+
 export interface GameState {
   roomId: string;
   isHost: boolean; // Know if we are the authority
+  settings: GameSettings; // Add settings to state
   players: Player[];
   bullets: Bullet[];
   particles: Particle[];
@@ -101,6 +108,8 @@ export type NetMessage =
   | { type: 'INPUT'; input: InputState }
   | { type: 'STATE_UPDATE'; state: GameState }
   | { type: 'ERROR'; message: string };
+
+export const MAX_CONNECTIONS = 8;
 
 export const REGION_LABELS: Record<Region, string> = {
   Taipei: '台北市',

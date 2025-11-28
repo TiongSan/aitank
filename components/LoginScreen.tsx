@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { Region, REGION_COLORS, REGION_LABELS } from '../types';
+import { Region, REGION_COLORS, REGION_LABELS, GameSettings } from '../types';
 
 interface LoginScreenProps {
-  onJoin: (name: string, region: Region, roomId: string, withBots: boolean) => void;
+  onJoin: (name: string, region: Region, roomId: string, settings: GameSettings) => void;
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
@@ -11,8 +11,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
   const [selectedRegion, setSelectedRegion] = useState<Region>('Taipei');
   const [mode, setMode] = useState<'create' | 'join'>('create');
   const [roomId, setRoomId] = useState('');
-  const [withBots, setWithBots] = useState(true);
   
+  // Game Settings State
+  const [botCount, setBotCount] = useState(5);
+  const [spawnInterval, setSpawnInterval] = useState(5); // seconds
+  const [buffDuration, setBuffDuration] = useState(15); // seconds
+
   const regions = Object.keys(REGION_COLORS) as Region[];
 
   // Generate a random room code on mount/switch to create
@@ -28,23 +32,27 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim() && roomId.trim()) {
-      // If joining, we ignore the local withBots state (it depends on the host)
-      // Passing false for join mode just to be clean, though logic is handled by host state mostly
-      onJoin(name, selectedRegion, roomId, mode === 'create' ? withBots : false);
+      const settings: GameSettings = {
+          botCount: mode === 'create' ? botCount : 0, // Joiners ignore this, host decides
+          itemSpawnInterval: spawnInterval * 1000,
+          buffDuration: buffDuration * 1000,
+      };
+      onJoin(name, selectedRegion, roomId, settings);
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 relative overflow-hidden">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 relative overflow-y-auto custom-scrollbar">
       {/* Animated Background Grid */}
-      <div className="absolute inset-0 opacity-20 pointer-events-none" 
+      <div className="fixed inset-0 opacity-20 pointer-events-none" 
            style={{ 
                backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)',
-               backgroundSize: '40px 40px'
+               backgroundSize: '40px 40px',
+               zIndex: 0
            }}>
       </div>
 
-      <div className="bg-gray-800 p-8 rounded-xl shadow-[0_0_20px_rgba(0,0,0,0.5)] border-4 border-gray-700 z-10 max-w-2xl w-full">
+      <div className="bg-gray-800 p-8 rounded-xl shadow-[0_0_20px_rgba(0,0,0,0.5)] border-4 border-gray-700 z-10 max-w-2xl w-full my-8">
         <h1 className="text-3xl md:text-4xl mb-6 text-center text-yellow-400 pixel-font tracking-tighter">坦克大戰：台灣爭霸</h1>
         
         {/* Room Mode Tabs */}
@@ -98,17 +106,31 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
           </div>
 
           {mode === 'create' && (
-            <div className="flex items-center space-x-2 bg-gray-700/30 p-2 rounded border border-gray-600">
-                <input 
-                type="checkbox" 
-                id="withBots" 
-                checked={withBots} 
-                onChange={(e) => setWithBots(e.target.checked)}
-                className="w-5 h-5 accent-green-500 cursor-pointer"
-                />
-                <label htmlFor="withBots" className="text-sm font-bold text-gray-300 cursor-pointer select-none">
-                加入 AI 機器人 (Bots)
-                </label>
+            <div className="bg-gray-700/30 p-4 rounded border border-gray-600 space-y-4">
+                <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-gray-300">AI 機器人數量: <span className="text-green-400">{botCount}</span></label>
+                    <input 
+                        type="range" min="0" max="14" step="1"
+                        value={botCount} onChange={(e) => setBotCount(parseInt(e.target.value))}
+                        className="w-1/2 accent-green-500"
+                    />
+                </div>
+                <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-gray-300">道具生成間隔: <span className="text-blue-400">{spawnInterval}s</span></label>
+                    <input 
+                        type="range" min="1" max="20" step="1"
+                        value={spawnInterval} onChange={(e) => setSpawnInterval(parseInt(e.target.value))}
+                        className="w-1/2 accent-blue-500"
+                    />
+                </div>
+                <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-gray-300">道具持續時間: <span className="text-purple-400">{buffDuration}s</span></label>
+                    <input 
+                        type="range" min="5" max="30" step="1"
+                        value={buffDuration} onChange={(e) => setBuffDuration(parseInt(e.target.value))}
+                        className="w-1/2 accent-purple-500"
+                    />
+                </div>
             </div>
           )}
 
@@ -136,11 +158,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
             {mode === 'create' ? '創建戰場' : '加入戰鬥'}
           </button>
         </form>
-      </div>
-
-      <div className="mt-8 text-gray-500 text-xs max-w-md text-center">
-        <p>提示: 使用 WASD 或 方向鍵移動。 空白鍵 或 點擊發射。</p>
-        <p>相同房間代碼將生成相同的地圖地形。</p>
       </div>
     </div>
   );

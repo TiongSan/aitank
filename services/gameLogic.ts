@@ -1,6 +1,6 @@
 
 import { 
-  GameState, Player, Bullet, Particle, InputState, Item, ItemType,
+  GameState, Player, Bullet, Particle, InputState, Item, ItemType, GameSettings,
   MAP_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BULLET_SPEED, FIRE_RATE, REGION_COLORS, Region, ITEM_RADIUS 
 } from '../types';
 import { audioService } from './audioService';
@@ -8,10 +8,8 @@ import { audioService } from './audioService';
 // Helper to generate UUID
 const uuid = () => Math.random().toString(36).substr(2, 9);
 
-// Item Constants
-const ITEM_SPAWN_RATE = 5000; // Spawn check every 5s
+// Item Constants (Now Fallbacks or Max limits)
 const MAX_ITEMS = 15;
-const BUFF_DURATION = 15000; // 15 seconds
 
 // --- SEEDED RANDOM UTILS ---
 function xmur3(str: string) {
@@ -89,7 +87,7 @@ const getSafePosition = (walls: {x: number, y: number, w: number, h: number}[], 
 };
 
 // Initial State (HOST ONLY USES THIS)
-export const initGame = (hostName: string, hostRegion: Region, roomId: string, withBots: boolean): GameState => {
+export const initGame = (hostName: string, hostRegion: Region, roomId: string, settings: GameSettings): GameState => {
   const walls = generateWalls(roomId);
   const seed = xmur3(roomId + "_spawns");
   const rand = mulberry32(seed());
@@ -116,9 +114,11 @@ export const initGame = (hostName: string, hostRegion: Region, roomId: string, w
   };
 
   const bots: Player[] = [];
-  if (withBots) {
+  const botCount = settings.botCount; // Use setting
+  
+  if (botCount > 0) {
     const regions = Object.keys(REGION_COLORS) as Region[];
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < botCount; i++) {
       const reg = regions[Math.floor(rand() * regions.length)];
       const botPos = getSafePosition(walls, rand);
       bots.push({
@@ -147,6 +147,7 @@ export const initGame = (hostName: string, hostRegion: Region, roomId: string, w
   return {
     roomId,
     isHost: true,
+    settings,
     players: [hostPlayer, ...bots],
     bullets: [],
     particles: [],
@@ -200,9 +201,11 @@ export const updateGame = (state: GameState, inputs: Record<string, InputState>,
   let nextItems = state.items.map(i => ({ ...i }));
   const nextRegionScores = { ...state.regionScores };
 
-  // --- 0. Item Spawning Logic ---
+  // --- 0. Item Spawning Logic (Using Settings) ---
+  const spawnRate = state.settings.itemSpawnInterval;
   let nextLastItemSpawnTime = state.lastItemSpawnTime;
-  if (now - state.lastItemSpawnTime > ITEM_SPAWN_RATE) {
+  
+  if (now - state.lastItemSpawnTime > spawnRate) {
       nextLastItemSpawnTime = now;
       if (nextItems.length < MAX_ITEMS) {
           const spawn = getSafePosition(state.walls);
@@ -320,6 +323,7 @@ export const updateGame = (state: GameState, inputs: Record<string, InputState>,
 
   // --- 3. Item Collection Logic ---
   // Check collisions between living players and items
+  const buffDuration = state.settings.buffDuration;
   nextPlayers.forEach(p => {
       if (!p.dead) {
           for (let i = nextItems.length - 1; i >= 0; i--) {
@@ -332,9 +336,9 @@ export const updateGame = (state: GameState, inputs: Record<string, InputState>,
                   if (item.type === 'HEALTH') {
                       p.hp = Math.min(p.maxHp, p.hp + 30); // Recover 30 HP
                   } else if (item.type === 'DOUBLE_DAMAGE') {
-                      p.damageBoostUntil = now + BUFF_DURATION;
+                      p.damageBoostUntil = now + buffDuration;
                   } else if (item.type === 'DOUBLE_SPEED') {
-                      p.speedBoostUntil = now + BUFF_DURATION;
+                      p.speedBoostUntil = now + buffDuration;
                   }
               }
           }

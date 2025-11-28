@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import LoginScreen from './components/LoginScreen';
 import GameCanvas from './components/GameCanvas';
 import UIOverlay from './components/UIOverlay';
-import { GameState, InputState, Region, NetMessage } from './types';
+import { GameState, InputState, Region, NetMessage, GameSettings, MAX_CONNECTIONS } from './types';
 import { initGame, updateGame, addPlayer, removePlayer } from './services/gameLogic';
 import { audioService } from './services/audioService';
 // Import PeerJS from ESM
@@ -11,7 +11,6 @@ import { Peer, DataConnection } from 'peerjs';
 
 // Prefix to avoid collisions on public PeerJS server
 const ROOM_PREFIX = 'rtw-pixel-tank-';
-const MAX_CONNECTIONS = 8; // Limit players to prevent host overload
 
 const MobileControls: React.FC<{ setInput: (updater: (prev: InputState) => InputState) => void }> = ({ setInput }) => {
     return (
@@ -63,8 +62,8 @@ const App: React.FC = () => {
   const peerRef = useRef<Peer | null>(null);
   const connectionsRef = useRef<DataConnection[]>([]); // For Host: list of clients
   const hostConnRef = useRef<DataConnection | null>(null); // For Client: connection to host
-
-  const handleJoin = async (name: string, region: Region, roomId: string, withBots: boolean) => {
+  
+  const handleJoin = async (name: string, region: Region, roomId: string, settings: GameSettings) => {
     setStatusMsg('連接中...');
     
     // Initialize Peer
@@ -84,7 +83,7 @@ const App: React.FC = () => {
         setStatusMsg('');
         
         peerRef.current = hostPeer;
-        const initialState = initGame(name, region, roomId, withBots);
+        const initialState = initGame(name, region, roomId, settings);
         stateRef.current = initialState;
         setGameState(initialState);
         setIsPlaying(true);
