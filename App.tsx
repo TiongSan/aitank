@@ -13,37 +13,102 @@ import { Peer, DataConnection } from 'peerjs';
 const ROOM_PREFIX = 'rtw-pixel-tank-';
 
 const MobileControls: React.FC<{ setInput: (updater: (prev: InputState) => InputState) => void }> = ({ setInput }) => {
+    const joystickRef = useRef<HTMLDivElement>(null);
+    const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
+    const [isAutoFire, setIsAutoFire] = useState(false);
+
+    // Helper to calculate direction
+    const handleTouch = (touch: React.Touch) => {
+        const rect = joystickRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        
+        const dx = touch.clientX - centerX;
+        const dy = touch.clientY - centerY;
+        
+        // Visuals
+        const maxRadius = rect.width / 2;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist > maxRadius) {
+            const ratio = maxRadius / dist;
+            setKnobPos({ x: dx * ratio, y: dy * ratio });
+        } else {
+            setKnobPos({ x: dx, y: dy });
+        }
+        
+        // Input Logic (Threshold 15px)
+        const deadZone = 15;
+        setInput(prev => ({
+            ...prev,
+            up: dy < -deadZone,
+            down: dy > deadZone,
+            left: dx < -deadZone,
+            right: dx > deadZone
+        }));
+    };
+
+    const onTouchStart = (e: React.TouchEvent) => {
+        handleTouch(e.targetTouches[0]);
+    };
+
+    const onTouchMove = (e: React.TouchEvent) => {
+        handleTouch(e.targetTouches[0]);
+    };
+
+    const onTouchEnd = () => {
+        setKnobPos({ x: 0, y: 0 });
+        setInput(prev => ({ ...prev, up: false, down: false, left: false, right: false }));
+    };
+
+    const toggleAutoFire = () => {
+        const newVal = !isAutoFire;
+        setIsAutoFire(newVal);
+        setInput(prev => ({ ...prev, fire: newVal }));
+    };
+
     return (
-        <div className="fixed bottom-4 left-4 right-4 flex justify-between pointer-events-auto lg:hidden touch-none select-none z-50">
-            <div className="relative w-32 h-32 bg-gray-800/50 rounded-full border border-gray-500">
-                <div 
-                    className="absolute top-0 left-1/3 w-1/3 h-1/3 bg-gray-600/50 rounded-t active:bg-white/50"
-                    onTouchStart={() => setInput(s => ({...s, up: true}))} onTouchEnd={() => setInput(s => ({...s, up: false}))}
-                ></div>
-                <div 
-                    className="absolute bottom-0 left-1/3 w-1/3 h-1/3 bg-gray-600/50 rounded-b active:bg-white/50"
-                    onTouchStart={() => setInput(s => ({...s, down: true}))} onTouchEnd={() => setInput(s => ({...s, down: false}))}
-                ></div>
-                <div 
-                    className="absolute left-0 top-1/3 w-1/3 h-1/3 bg-gray-600/50 rounded-l active:bg-white/50"
-                    onTouchStart={() => setInput(s => ({...s, left: true}))} onTouchEnd={() => setInput(s => ({...s, left: false}))}
-                ></div>
-                <div 
-                    className="absolute right-0 top-1/3 w-1/3 h-1/3 bg-gray-600/50 rounded-r active:bg-white/50"
-                    onTouchStart={() => setInput(s => ({...s, right: true}))} onTouchEnd={() => setInput(s => ({...s, right: false}))}
-                ></div>
+        <div className="fixed bottom-6 left-6 right-6 flex justify-between items-end pointer-events-none lg:hidden z-50 select-none">
+            {/* Joystick */}
+            <div 
+                ref={joystickRef}
+                className="relative w-36 h-36 bg-gray-800/50 rounded-full border-2 border-gray-500 pointer-events-auto backdrop-blur-sm touch-none"
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
+            >
+                 <div 
+                    className="absolute w-12 h-12 bg-gray-300/80 rounded-full shadow-lg transition-transform duration-75 ease-out"
+                    style={{ 
+                        top: '50%', left: '50%', 
+                        marginTop: '-24px', marginLeft: '-24px',
+                        transform: `translate(${knobPos.x}px, ${knobPos.y}px)` 
+                    }}
+                />
             </div>
             
-            <button 
-                className="w-24 h-24 bg-red-600/80 rounded-full border-4 border-red-800 active:bg-red-500 shadow-lg flex items-center justify-center font-bold text-white pixel-font"
-                onTouchStart={() => setInput(s => ({...s, fire: true}))} 
-                onTouchEnd={() => setInput(s => ({...s, fire: false}))}
-            >
-                FIRE
-            </button>
+            {/* Buttons */}
+            <div className="flex flex-col items-end gap-4 pointer-events-auto">
+                <button
+                    onClick={toggleAutoFire}
+                    className={`px-4 py-2 rounded-full font-bold text-xs pixel-font border-2 shadow-md transition-all ${isAutoFire ? 'bg-green-600 border-green-400 text-white' : 'bg-gray-800 border-gray-600 text-gray-400'}`}
+                >
+                    AUTO FIRE: {isAutoFire ? 'ON' : 'OFF'}
+                </button>
+                
+                <button 
+                    className={`w-20 h-20 rounded-full border-4 shadow-lg flex items-center justify-center font-bold text-white pixel-font touch-none transition-all active:scale-95 ${isAutoFire ? 'opacity-50 cursor-not-allowed bg-gray-700 border-gray-600' : 'bg-red-600/80 border-red-500 active:bg-red-500'}`}
+                    onTouchStart={() => !isAutoFire && setInput(s => ({...s, fire: true}))}
+                    onTouchEnd={() => !isAutoFire && setInput(s => ({...s, fire: false}))}
+                >
+                    FIRE
+                </button>
+            </div>
         </div>
-    )
-}
+    );
+};
 
 const App: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
