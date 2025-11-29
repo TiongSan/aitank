@@ -112,6 +112,7 @@ export const initGame = (hostName: string, hostRegion: Region, roomId: string, r
     dead: false,
     damageBoostUntil: 0,
     speedBoostUntil: 0,
+    ping: 0,
   };
 
   const bots: Player[] = [];
@@ -138,6 +139,7 @@ export const initGame = (hostName: string, hostRegion: Region, roomId: string, r
         dead: false,
         damageBoostUntil: 0,
         speedBoostUntil: 0,
+        ping: 0,
       });
     }
   }
@@ -180,6 +182,7 @@ export const addPlayer = (state: GameState, playerId: string, name: string, regi
         dead: false,
         damageBoostUntil: 0,
         speedBoostUntil: 0,
+        ping: 0,
     };
     return {
         ...state,

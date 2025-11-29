@@ -38,6 +38,7 @@ export interface Player {
   // Buffs (timestamp when it expires)
   damageBoostUntil: number;
   speedBoostUntil: number;
+  ping: number; // Latency in ms
 }
 
 export interface Bullet {
@@ -126,7 +127,9 @@ export type NetMessage =
   | { type: 'INPUT'; input: InputState }
   | { type: 'STATE_UPDATE'; state: GameState }
   | { type: 'ERROR'; message: string }
-  | { type: 'CHAT'; message: ChatMessage };
+  | { type: 'CHAT'; message: ChatMessage }
+  | { type: 'PING'; timestamp: number }
+  | { type: 'PONG'; timestamp: number };
 
 export const MAX_CONNECTIONS = 8;
 
@@ -182,3 +185,6 @@ export const BULLET_SPEED = 12;
 export const PLAYER_SPEED = 4;
 export const FIRE_RATE = 500; // ms
 export const ITEM_RADIUS = 15;
+
+// Constants for Google Sheet (Lobby)
+export const GOOGLE_SHEET_URL_KEY = 'rtw_script_url';

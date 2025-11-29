@@ -157,8 +157,9 @@ const App: React.FC = () => {
   const connectionsRef = useRef<DataConnection[]>([]); // For Host: list of clients
   const hostConnRef = useRef<DataConnection | null>(null); // For Client: connection to host
   
-  // Heartbeat Ref
+  // Heartbeat & Ping Refs
   const heartbeatIntervalRef = useRef<number | undefined>(undefined);
+  const pingIntervalRef = useRef<number | undefined>(undefined);
 
   // Added roomName parameter
   const handleJoin = async (name: string, region: Region, roomId: string, roomName: string, settings: GameSettings) => {
@@ -202,6 +203,16 @@ const App: React.FC = () => {
         sendHeartbeat(); // Immediate
         heartbeatIntervalRef.current = window.setInterval(sendHeartbeat, 5000); // Every 5s
 
+        // Start PING (Latency) Interval
+        pingIntervalRef.current = window.setInterval(() => {
+            const now = Date.now();
+            connectionsRef.current.forEach(conn => {
+                if (conn.open) {
+                    conn.send({ type: 'PING', timestamp: now } as NetMessage);
+                }
+            });
+        }, 2000); // Check latency every 2 seconds
+
         // Listen for connections
         hostPeer.on('connection', (conn) => {
             // CHECK PLAYER LIMIT
@@ -242,6 +253,15 @@ const App: React.FC = () => {
                             c.send(msg);
                         }
                     });
+                } else if (msg.type === 'PONG') {
+                    // Host received PONG: Calculate RTT and update player ping
+                    if (stateRef.current) {
+                         const rtt = Date.now() - msg.timestamp;
+                         const pIndex = stateRef.current.players.findIndex(p => p.id === conn.peer);
+                         if (pIndex !== -1) {
+                             stateRef.current.players[pIndex].ping = rtt;
+                         }
+                    }
                 }
             });
 
@@ -300,6 +320,9 @@ const App: React.FC = () => {
                         window.location.reload();
                     } else if (msg.type === 'CHAT') {
                         setChatMessages(prev => [...prev, msg.message]);
+                    } else if (msg.type === 'PING') {
+                        // Client received PING: immediately PONG back
+                        conn.send({ type: 'PONG', timestamp: msg.timestamp } as NetMessage);
                     }
                 });
                 
@@ -428,6 +451,7 @@ const App: React.FC = () => {
     return () => {
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
       if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
     };
   }, [isPlaying]);
 

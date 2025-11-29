@@ -42,6 +42,12 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, chatMessages = [], onS
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const getPingColor = (ping: number) => {
+      if (ping < 100) return 'text-green-400';
+      if (ping < 200) return 'text-yellow-400';
+      return 'text-red-400';
+  };
+
   return (
     <div className="absolute top-0 left-0 w-full h-full pointer-events-none p-4 flex justify-between items-start">
       
@@ -55,6 +61,9 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, chatMessages = [], onS
            <p className="mb-1">Name: <span style={{ color: me?.color }}>{me?.name}</span></p>
            <p className="mb-1">HP: {Math.max(0, me?.hp || 0)}/100</p>
            <p className="mb-1">Score: {me?.score}</p>
+           {me?.id !== 'host' && !me?.isBot && (
+               <p className="mb-1">Ping: <span className={getPingColor(me?.ping || 0)}>{me?.ping || 0}ms</span></p>
+           )}
            <div className="mt-2 pt-2 border-t border-gray-600 text-xs text-gray-400">
              <p className="text-green-400">線上人數: {totalPlayers}</p>
              <p className="text-blue-400">BOT 數量: {botCount}</p>

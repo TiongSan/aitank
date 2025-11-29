@@ -1,4 +1,5 @@
 
+
 import React, { useRef, useEffect } from 'react';
 import { GameState, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, PLAYER_RADIUS, MAP_SIZE, REGION_LABELS, ITEM_RADIUS } from '../types';
 
@@ -140,6 +141,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
             ctx.setLineDash([]);
         }
 
+        // Ping Display (Above Name)
+        if (!p.isBot && p.id !== 'host') {
+             ctx.fillStyle = p.ping > 200 ? '#f87171' : (p.ping > 100 ? '#facc15' : '#4ade80');
+             ctx.font = '8px monospace';
+             ctx.textAlign = 'center';
+             ctx.fillText(`${p.ping}ms`, 0, -PLAYER_RADIUS - 25);
+        }
+
         // Name and Region
         ctx.fillStyle = '#fff';
         ctx.font = '10px "Press Start 2P"';
@@ -152,9 +161,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
 
         // HP Bar
         ctx.fillStyle = 'red';
-        ctx.fillRect(-15, -PLAYER_RADIUS - 25, 30, 4);
+        ctx.fillRect(-15, -PLAYER_RADIUS - 35, 30, 4); // Moved up slightly to fit Ping
         ctx.fillStyle = '#0f0';
-        ctx.fillRect(-15, -PLAYER_RADIUS - 25, 30 * (p.hp / p.maxHp), 4);
+        ctx.fillRect(-15, -PLAYER_RADIUS - 35, 30 * (p.hp / p.maxHp), 4);
 
         ctx.rotate(p.rotation);
 
