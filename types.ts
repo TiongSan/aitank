@@ -1,4 +1,5 @@
 
+
 export type Region = 
   | 'Taipei'    
   | 'NewTaipei' 
@@ -80,6 +81,7 @@ export interface GameSettings {
 
 export interface GameState {
   roomId: string;
+  roomName?: string; // Optional custom room name
   isHost: boolean; // Know if we are the authority
   settings: GameSettings; // Add settings to state
   players: Player[];
@@ -107,6 +109,14 @@ export interface ChatMessage {
   text: string;
   color: string;
   timestamp: number;
+}
+
+export interface LobbyRoomInfo {
+  roomId: string;
+  hostName: string;
+  region: Region;
+  playerCount: number;
+  botCount: number;
 }
 
 // Network Types

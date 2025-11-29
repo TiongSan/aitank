@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import LoginScreen from './components/LoginScreen';
 import GameCanvas from './components/GameCanvas';
@@ -6,6 +7,7 @@ import UIOverlay from './components/UIOverlay';
 import { GameState, InputState, Region, NetMessage, GameSettings, MAX_CONNECTIONS, ChatMessage } from './types';
 import { initGame, updateGame, addPlayer, removePlayer } from './services/gameLogic';
 import { audioService } from './services/audioService';
+import { heartbeatRoom } from './services/lobbyService';
 // Import PeerJS from ESM
 import { Peer, DataConnection } from 'peerjs';
 
@@ -41,12 +43,35 @@ const MobileControls: React.FC<{ setInput: (updater: (prev: InputState) => Input
         
         // Input Logic (Threshold 15px)
         const deadZone = 15;
+        // 8-Direction Logic using Angle
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        // Normalize angle to 0-360
+        const normAngle = angle < 0 ? angle + 360 : angle;
+
+        let u=false, d=false, l=false, r=false;
+
+        if (dist > deadZone) {
+            // Right: 337.5 - 22.5
+            if (normAngle >= 337.5 || normAngle < 22.5) { r=true; }
+            // Down-Right: 22.5 - 67.5
+            else if (normAngle >= 22.5 && normAngle < 67.5) { r=true; d=true; }
+            // Down: 67.5 - 112.5
+            else if (normAngle >= 67.5 && normAngle < 112.5) { d=true; }
+            // Down-Left: 112.5 - 157.5
+            else if (normAngle >= 112.5 && normAngle < 157.5) { d=true; l=true; }
+            // Left: 157.5 - 202.5
+            else if (normAngle >= 157.5 && normAngle < 202.5) { l=true; }
+            // Up-Left: 202.5 - 247.5
+            else if (normAngle >= 202.5 && normAngle < 247.5) { l=true; u=true; }
+            // Up: 247.5 - 292.5
+            else if (normAngle >= 247.5 && normAngle < 292.5) { u=true; }
+            // Up-Right: 292.5 - 337.5
+            else if (normAngle >= 292.5 && normAngle < 337.5) { u=true; r=true; }
+        }
+
         setInput(prev => ({
             ...prev,
-            up: dy < -deadZone,
-            down: dy > deadZone,
-            left: dx < -deadZone,
-            right: dx > deadZone
+            up: u, down: d, left: l, right: r
         }));
     };
 
@@ -132,7 +157,11 @@ const App: React.FC = () => {
   const connectionsRef = useRef<DataConnection[]>([]); // For Host: list of clients
   const hostConnRef = useRef<DataConnection | null>(null); // For Client: connection to host
   
-  const handleJoin = async (name: string, region: Region, roomId: string, settings: GameSettings) => {
+  // Heartbeat Ref
+  const heartbeatIntervalRef = useRef<number | undefined>(undefined);
+
+  // Added roomName parameter
+  const handleJoin = async (name: string, region: Region, roomId: string, roomName: string, settings: GameSettings) => {
     setStatusMsg('連接中...');
     
     // Initialize Peer
@@ -152,7 +181,7 @@ const App: React.FC = () => {
         setStatusMsg('');
         
         peerRef.current = hostPeer;
-        const initialState = initGame(name, region, roomId, settings);
+        const initialState = initGame(name, region, roomId, roomName, settings);
         stateRef.current = initialState;
         setGameState(initialState);
         setIsPlaying(true);
@@ -161,6 +190,17 @@ const App: React.FC = () => {
 
         // Host Input Setup
         allInputsRef.current['host'] = inputRef.current;
+
+        // Start Heartbeat to Google Sheets
+        const sendHeartbeat = () => {
+            if (stateRef.current) {
+                const pCount = stateRef.current.players.filter(p => !p.isBot).length;
+                const bCount = stateRef.current.settings.botCount;
+                heartbeatRoom(roomId, name, roomName, region, pCount, bCount);
+            }
+        };
+        sendHeartbeat(); // Immediate
+        heartbeatIntervalRef.current = window.setInterval(sendHeartbeat, 5000); // Every 5s
 
         // Listen for connections
         hostPeer.on('connection', (conn) => {
@@ -387,6 +427,7 @@ const App: React.FC = () => {
 
     return () => {
       if (reqRef.current) cancelAnimationFrame(reqRef.current);
+      if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
     };
   }, [isPlaying]);
 

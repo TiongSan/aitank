@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { GameState, Region, REGION_COLORS, REGION_LABELS, ChatMessage } from '../types';
 
@@ -49,7 +50,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, chatMessages = [], onS
       <div className="mt-0 lg:mt-[220px] pointer-events-auto origin-top-left scale-75 lg:scale-100"> 
         <div className="bg-black/70 border border-gray-500 p-4 rounded text-white font-mono text-sm shadow-lg backdrop-blur-sm">
            <h3 className="text-yellow-400 font-bold mb-2 pixel-font">STATUS</h3>
-           <p className="mb-1">Room: <span className="text-yellow-200">{gameState.roomId}</span></p>
+           <p className="mb-1">Room: <span className="text-yellow-200">{gameState.roomName || gameState.roomId}</span></p>
+           {gameState.roomName && <p className="mb-1 text-xs text-gray-400">ID: {gameState.roomId}</p>}
            <p className="mb-1">Name: <span style={{ color: me?.color }}>{me?.name}</span></p>
            <p className="mb-1">HP: {Math.max(0, me?.hp || 0)}/100</p>
            <p className="mb-1">Score: {me?.score}</p>

@@ -1,4 +1,5 @@
 
+
 import { 
   GameState, Player, Bullet, Particle, InputState, Item, ItemType, GameSettings,
   MAP_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BULLET_SPEED, FIRE_RATE, REGION_COLORS, Region, ITEM_RADIUS 
@@ -87,7 +88,7 @@ const getSafePosition = (walls: {x: number, y: number, w: number, h: number}[], 
 };
 
 // Initial State (HOST ONLY USES THIS)
-export const initGame = (hostName: string, hostRegion: Region, roomId: string, settings: GameSettings): GameState => {
+export const initGame = (hostName: string, hostRegion: Region, roomId: string, roomName: string, settings: GameSettings): GameState => {
   const walls = generateWalls(roomId);
   const seed = xmur3(roomId + "_spawns");
   const rand = mulberry32(seed());
@@ -146,6 +147,7 @@ export const initGame = (hostName: string, hostRegion: Region, roomId: string, s
 
   return {
     roomId,
+    roomName,
     isHost: true,
     settings,
     players: [hostPlayer, ...bots],
