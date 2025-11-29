@@ -85,7 +85,6 @@ export interface GameSettings {
   botCount: number;
   itemSpawnInterval: number; // ms
   buffDuration: number;      // ms
-  enableAICommentary: boolean;
 }
 
 export interface GameState {
@@ -139,8 +138,7 @@ export type NetMessage =
   | { type: 'ERROR'; message: string }
   | { type: 'CHAT'; message: ChatMessage }
   | { type: 'PING'; timestamp: number }
-  | { type: 'PONG'; timestamp: number }
-  | { type: 'COMMENTARY'; text: string };
+  | { type: 'PONG'; timestamp: number };
 
 export const MAX_CONNECTIONS = 8;
 export const WIN_SCORE = 3000;

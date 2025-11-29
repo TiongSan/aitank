@@ -8,10 +8,9 @@ interface UIOverlayProps {
   chatMessages?: ChatMessage[];
   onSendMessage?: (text: string) => void;
   setChatFocus?: (focused: boolean) => void;
-  aiCommentary?: string;
 }
 
-const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, chatMessages = [], onSendMessage, setChatFocus, aiCommentary }) => {
+const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, chatMessages = [], onSendMessage, setChatFocus }) => {
   const [chatInput, setChatInput] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -83,16 +82,6 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, chatMessages = [], onS
           </div>
       </div>
       
-      {/* AI Commentary Banner */}
-      {aiCommentary && (
-        <div className="absolute top-24 left-1/2 transform -translate-x-1/2 w-full max-w-2xl pointer-events-none z-40 px-4">
-            <div className="bg-gradient-to-r from-transparent via-black/80 to-transparent text-center py-2">
-                <span className="text-yellow-400 font-bold mr-2 pixel-font">[AI 戰報]</span>
-                <span className="text-white text-sm shadow-black drop-shadow-md animate-pulse">{aiCommentary}</span>
-            </div>
-        </div>
-      )}
-
       {/* Right: Leaderboard */}
       <div className="bg-black/80 border-2 border-gray-600 p-4 rounded-lg text-white font-mono text-sm min-w-[200px] shadow-xl backdrop-blur-md pointer-events-auto max-h-[400px] overflow-y-auto custom-scrollbar scale-75 lg:scale-100 origin-top-right">
         <h3 className="text-center text-green-400 font-bold mb-2 border-b border-gray-600 pb-1 pixel-font">地區戰況</h3>
